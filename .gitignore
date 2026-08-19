@@ -1,0 +1,8 @@
+node_modules
+.npm-cache
+.next
+out
+.env*
+!.env.example
+npm-debug.log*
+.DS_Store
