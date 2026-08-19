@@ -4,9 +4,12 @@
 
 ## 启动
 
+需要 Node.js 24 和 pnpm 11。使用 nvm 时可执行：
+
 ```bash
-npm install
-npm run dev
+nvm use
+pnpm install
+pnpm dev
 ```
 
 打开 <http://localhost:3000>。
