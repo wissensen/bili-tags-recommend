@@ -5,10 +5,31 @@ import type { ChangeEvent, DragEvent, KeyboardEvent, SVGProps } from 'react';
 import type { Badge, RecommendTag, SelectedTag } from '@/lib/types';
 
 const MAX_TAGS = 10;
+const MAX_TAG_LENGTH = 20;
+const MAX_TITLE_LENGTH = 80;
 const MAX_FILE_BYTES = 100 * 1024 * 1024;
+const MAX_COVER_BYTES = 5 * 1024 * 1024;
 const ANALYSIS_STAGES = ['解析视频画面…', '识别语音与字幕…', '匹配热点与分区…', '生成推荐标签…'];
+const VIDEO_MIME_BY_EXTENSION = {
+  mp4: 'video/mp4',
+  mov: 'video/quicktime',
+  mkv: 'video/x-matroska',
+} as const;
+const VIDEO_EXTENSIONS = new Set(Object.keys(VIDEO_MIME_BY_EXTENSION));
+const VIDEO_MIME_TYPES = new Set<string>(Object.values(VIDEO_MIME_BY_EXTENSION));
+const COVER_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const CATEGORIES = [
+  ['vlog', 'vlog'],
+  ['film-edit', '影视剪辑'],
+  ['animation', '动画'],
+  ['game', '游戏'],
+  ['knowledge', '知识'],
+  ['life', '生活'],
+] as const;
+const CATEGORY_IDS = new Set<string>(CATEGORIES.map(([id]) => id));
 
 type Phase = 'upload' | 'uploading' | 'settings' | 'analyzing' | 'recommendations' | 'success';
+type FieldErrors = Partial<Record<'cover' | 'title' | 'category', string>>;
 
 type UploadInitResponse = { uploadId: string };
 type AnalysisResponse = { analysisId: string };
@@ -93,6 +114,71 @@ function formatSize(bytes: number) {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
+function validateVideoFile(file: File) {
+  if (file.size === 0) return '视频文件不能为空';
+  if (file.size > MAX_FILE_BYTES) return '仅支持不超过 100MB 的视频文件';
+
+  const extension = file.name.split('.').pop()?.toLocaleLowerCase();
+  if (!extension || !VIDEO_EXTENSIONS.has(extension) || (file.type && !VIDEO_MIME_TYPES.has(file.type))) {
+    return '请选择 MP4、MOV 或 MKV 视频文件';
+  }
+
+  return '';
+}
+
+function getVideoMimeType(file: File) {
+  if (file.type) return file.type;
+  const extension = file.name.split('.').pop()?.toLocaleLowerCase() as keyof typeof VIDEO_MIME_BY_EXTENSION;
+  return VIDEO_MIME_BY_EXTENSION[extension];
+}
+
+function validateCoverFile(file: File | null) {
+  if (!file) return '请添加视频封面';
+  if (file.size === 0) return '封面图片不能为空';
+  if (file.size > MAX_COVER_BYTES) return '封面图片不能超过 5MB';
+  if (!COVER_MIME_TYPES.has(file.type)) return '封面仅支持 JPG、PNG 或 WebP 格式';
+  return '';
+}
+
+function validateTitle(value: string) {
+  const normalized = value.trim();
+  if (!normalized) return '请输入视频标题';
+  if (Array.from(normalized).length > MAX_TITLE_LENGTH) return `视频标题不能超过 ${MAX_TITLE_LENGTH} 个字`;
+  return '';
+}
+
+function validateCategory(value: string) {
+  return CATEGORY_IDS.has(value) ? '' : '请选择有效的视频分区';
+}
+
+function normalizeTag(value: string) {
+  return value.trim().replace(/\s+/g, ' ');
+}
+
+function tagIdentity(value: string) {
+  return normalizeTag(value).normalize('NFKC').toLocaleLowerCase('zh-CN');
+}
+
+function validateTag(value: string, selectedTags: SelectedTag[]) {
+  const normalized = normalizeTag(value);
+  if (!normalized) return '请输入标签内容';
+  if (Array.from(normalized).length > MAX_TAG_LENGTH) return `单个标签不能超过 ${MAX_TAG_LENGTH} 个字`;
+  if (/[#，,\r\n]/.test(normalized)) return '标签中不能包含 #、逗号或换行';
+  if (selectedTags.some((tag) => tagIdentity(tag.text) === tagIdentity(normalized))) return '该标签已添加';
+  if (selectedTags.length >= MAX_TAGS) return `最多添加 ${MAX_TAGS} 个标签`;
+  return '';
+}
+
+function createIdempotencyKey() {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const value = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
+}
+
 async function readResponse<T>(response: Response): Promise<T> {
   const data = (await response.json()) as T & { error?: { message?: string } };
   if (!response.ok) throw new Error(data.error?.message ?? '请求失败，请稍后重试');
@@ -102,6 +188,10 @@ async function readResponse<T>(response: Response): Promise<T> {
 export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
+  const coverButtonRef = useRef<HTMLButtonElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const categorySelectRef = useRef<HTMLSelectElement>(null);
+  const tagInputRef = useRef<HTMLInputElement>(null);
   const [phase, setPhase] = useState<Phase>('upload');
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -109,6 +199,7 @@ export default function Home() {
   const [progress, setProgress] = useState(0);
   const [title, setTitle] = useState('');
   const [categoryId, setCategoryId] = useState('vlog');
+  const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverUrl, setCoverUrl] = useState('');
   const [analysisStage, setAnalysisStage] = useState(ANALYSIS_STAGES[0]);
   const [analysisId, setAnalysisId] = useState('');
@@ -117,6 +208,8 @@ export default function Home() {
   const [selectedTags, setSelectedTags] = useState<SelectedTag[]>([]);
   const [recommendations, setRecommendations] = useState<RecommendTag[]>([]);
   const [tagInput, setTagInput] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [tagError, setTagError] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionId, setSubmissionId] = useState('');
@@ -140,12 +233,10 @@ export default function Home() {
 
   async function startUpload(nextFile: File) {
     setError('');
-    if (nextFile.size > MAX_FILE_BYTES) {
-      setError('演示环境仅支持不超过 100MB 的视频文件');
-      return;
-    }
-    if (!nextFile.type.startsWith('video/')) {
-      setError('请选择 MP4、MOV 或 MKV 视频文件');
+    const validationError = validateVideoFile(nextFile);
+    if (validationError) {
+      setError(validationError);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
@@ -157,19 +248,18 @@ export default function Home() {
         await fetch('/api/uploads/init', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileName: nextFile.name, size: nextFile.size, mimeType: nextFile.type }),
+          body: JSON.stringify({ fileName: nextFile.name, size: nextFile.size, mimeType: getVideoMimeType(nextFile) }),
         }),
       );
       setUploadId(init.uploadId);
 
-      // Demo 只模拟直传进度；真实实现应 PUT 到 init 接口返回的 R2 签名地址。
       await simulateUpload();
       await readResponse(
         await fetch(`/api/uploads/${init.uploadId}/complete`, { method: 'POST' }),
       );
 
       const baseName = nextFile.name.replace(/\.[^.]+$/, '');
-      setTitle(baseName.slice(0, 80));
+      setTitle(Array.from(baseName).slice(0, MAX_TITLE_LENGTH).join(''));
       setPhase('settings');
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : '上传失败，请重试');
@@ -192,8 +282,21 @@ export default function Home() {
   function handleCoverChange(event: ChangeEvent<HTMLInputElement>) {
     const image = event.target.files?.[0];
     if (!image) return;
+
+    const validationError = validateCoverFile(image);
+    if (validationError) {
+      if (coverUrl) URL.revokeObjectURL(coverUrl);
+      setCoverFile(null);
+      setCoverUrl('');
+      setFieldErrors((current) => ({ ...current, cover: validationError }));
+      event.target.value = '';
+      return;
+    }
+
     if (coverUrl) URL.revokeObjectURL(coverUrl);
+    setCoverFile(image);
     setCoverUrl(URL.createObjectURL(image));
+    setFieldErrors((current) => ({ ...current, cover: undefined }));
   }
 
   async function requestRecommendations(nextSessionId: string, nextCursor?: string) {
@@ -210,8 +313,19 @@ export default function Home() {
 
   async function startAnalysis() {
     setError('');
-    if (!title.trim()) {
-      setError('请先填写视频标题');
+    const nextErrors: FieldErrors = {
+      cover: validateCoverFile(coverFile) || undefined,
+      title: validateTitle(title) || undefined,
+      category: validateCategory(categoryId) || undefined,
+    };
+    setFieldErrors(nextErrors);
+
+    if (nextErrors.cover || nextErrors.title || nextErrors.category) {
+      window.requestAnimationFrame(() => {
+        if (nextErrors.cover) coverButtonRef.current?.focus();
+        else if (nextErrors.title) titleInputRef.current?.focus();
+        else categorySelectRef.current?.focus();
+      });
       return;
     }
 
@@ -220,7 +334,7 @@ export default function Home() {
       const analysis = await readResponse<AnalysisResponse>(
         await fetch('/api/analyses', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': createIdempotencyKey() },
           body: JSON.stringify({ uploadId, title: title.trim(), categoryId }),
         }),
       );
@@ -242,21 +356,27 @@ export default function Home() {
   }
 
   function addTag(text: string, candidateId?: string) {
-    const normalized = text.trim();
-    if (!normalized || selectedTags.length >= MAX_TAGS) return;
-    if (selectedTags.some((tag) => tag.text.toLocaleLowerCase() === normalized.toLocaleLowerCase())) return;
+    const validationError = validateTag(text, selectedTags);
+    if (validationError) {
+      setTagError(validationError);
+      return false;
+    }
+
+    const normalized = normalizeTag(text);
     setSelectedTags((current) => [...current, { text: normalized, candidateId }]);
+    setTagError('');
+    return true;
   }
 
   function removeTag(index: number) {
     setSelectedTags((current) => current.filter((_, itemIndex) => itemIndex !== index));
+    setTagError('');
   }
 
   function handleTagKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key !== 'Enter') return;
+    if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
     event.preventDefault();
-    addTag(tagInput);
-    setTagInput('');
+    if (addTag(tagInput)) setTagInput('');
   }
 
   async function refreshRecommendations() {
@@ -273,24 +393,42 @@ export default function Home() {
   }
 
   async function submit() {
-    if (!selectedTags.length) {
-      setError('请至少选择一个标签');
+    if (isSubmitting) return;
+    setError('');
+
+    let tagsToSubmit = selectedTags;
+    if (tagInput.trim()) {
+      const validationError = validateTag(tagInput, selectedTags);
+      if (validationError) {
+        setTagError(validationError);
+        tagInputRef.current?.focus();
+        return;
+      }
+
+      tagsToSubmit = [...selectedTags, { text: normalizeTag(tagInput) }];
+      setSelectedTags(tagsToSubmit);
+      setTagInput('');
+      setTagError('');
+    }
+
+    if (!tagsToSubmit.length) {
+      setTagError('请至少选择一个标签');
+      tagInputRef.current?.focus();
       return;
     }
     setIsSubmitting(true);
-    setError('');
     try {
       const result = await readResponse<SubmissionResponse>(
         await fetch('/api/submissions', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': createIdempotencyKey() },
           body: JSON.stringify({
             uploadId,
             analysisId,
             title: title.trim(),
             categoryId,
             coverUrl: coverUrl || undefined,
-            tags: selectedTags,
+            tags: tagsToSubmit,
           }),
         }),
       );
@@ -311,6 +449,7 @@ export default function Home() {
     setProgress(0);
     setTitle('');
     setCategoryId('vlog');
+    setCoverFile(null);
     setCoverUrl('');
     setAnalysisId('');
     setSessionId('');
@@ -318,6 +457,8 @@ export default function Home() {
     setSelectedTags([]);
     setRecommendations([]);
     setTagInput('');
+    setFieldErrors({});
+    setTagError('');
     setSubmissionId('');
     setError('');
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -382,10 +523,10 @@ export default function Home() {
               >
                 <div className="upload-icon"><UploadIcon width="30" height="30" /></div>
                 <h2>点击或拖拽视频到此处上传</h2>
-                <p>支持 MP4 / MOV / MKV 格式，演示环境单个文件不超过 100MB</p>
+                <p>支持 MP4 / MOV / MKV 格式，单个文件不超过 100MB</p>
                 <span className="choose-button">选择视频文件</span>
               </div>
-              <input ref={fileInputRef} className="sr-only" type="file" accept="video/mp4,video/quicktime,video/x-matroska,video/*" onChange={handleFileChange} />
+              <input ref={fileInputRef} className="sr-only" type="file" accept=".mp4,.mov,.mkv,video/mp4,video/quicktime,video/x-matroska" onChange={handleFileChange} />
               <p className="agreement">上传即代表你已阅读并同意《创作公约》</p>
             </section>
           )}
@@ -405,7 +546,14 @@ export default function Home() {
           )}
 
           {phase === 'settings' && file && (
-            <section className="panel">
+            <form
+              className="panel"
+              noValidate
+              onSubmit={(event) => {
+                event.preventDefault();
+                void startAnalysis();
+              }}
+            >
               <div className="upload-summary">
                 <div className="file-thumb small"><PlayIcon width="22" height="22" /></div>
                 <div className="file-meta">
@@ -418,36 +566,79 @@ export default function Home() {
               <h2 className="section-heading">基本设置</h2>
               <div className="form-row">
                 <label><em>*</em>封面</label>
-                <button
-                  type="button"
-                  className={`cover-box ${coverUrl ? 'has-cover' : ''}`}
-                  style={coverUrl ? { backgroundImage: `url(${coverUrl})` } : undefined}
-                  onClick={() => coverInputRef.current?.click()}
-                >
-                  <span>{coverUrl ? '更换封面' : '+ 添加封面'}</span>
-                </button>
-                <input ref={coverInputRef} className="sr-only" type="file" accept="image/*" onChange={handleCoverChange} />
+                <div className="field-control">
+                  <button
+                    ref={coverButtonRef}
+                    type="button"
+                    className={`cover-box ${coverUrl ? 'has-cover' : ''} ${fieldErrors.cover ? 'invalid' : ''}`}
+                    style={coverUrl ? { backgroundImage: `url(${coverUrl})` } : undefined}
+                    aria-describedby={fieldErrors.cover ? 'cover-error' : 'cover-help'}
+                    onClick={() => coverInputRef.current?.click()}
+                  >
+                    <span>{coverUrl ? '更换封面' : '+ 添加封面'}</span>
+                  </button>
+                  {fieldErrors.cover ? (
+                    <p className="field-error" id="cover-error" role="alert">{fieldErrors.cover}</p>
+                  ) : (
+                    <p className="field-help" id="cover-help">支持 JPG、PNG、WebP，不超过 5MB</p>
+                  )}
+                </div>
+                <input
+                  ref={coverInputRef}
+                  className="sr-only"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  aria-invalid={Boolean(fieldErrors.cover)}
+                  aria-describedby={fieldErrors.cover ? 'cover-error' : 'cover-help'}
+                  onChange={handleCoverChange}
+                />
               </div>
               <div className="form-row">
                 <label htmlFor="video-title"><em>*</em>标题</label>
-                <div className="field">
-                  <input id="video-title" value={title} maxLength={80} onChange={(event) => setTitle(event.target.value)} />
-                  <span>{title.length}/80</span>
+                <div className={`field ${fieldErrors.title ? 'invalid' : ''}`}>
+                  <input
+                    ref={titleInputRef}
+                    id="video-title"
+                    value={title}
+                    maxLength={MAX_TITLE_LENGTH}
+                    aria-invalid={Boolean(fieldErrors.title)}
+                    aria-describedby={fieldErrors.title ? 'title-error title-counter' : 'title-counter'}
+                    onChange={(event) => {
+                      const nextTitle = event.target.value;
+                      setTitle(nextTitle);
+                      if (fieldErrors.title) {
+                        setFieldErrors((current) => ({ ...current, title: validateTitle(nextTitle) || undefined }));
+                      }
+                    }}
+                    onBlur={() => setFieldErrors((current) => ({ ...current, title: validateTitle(title) || undefined }))}
+                  />
+                  <span className="field-counter" id="title-counter">{Array.from(title).length}/{MAX_TITLE_LENGTH}</span>
+                  {fieldErrors.title && <p className="field-error" id="title-error" role="alert">{fieldErrors.title}</p>}
                 </div>
               </div>
               <div className="form-row">
                 <label htmlFor="category"><em>*</em>分区</label>
-                <select id="category" value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
-                  <option value="vlog">vlog</option>
-                  <option value="film-edit">影视剪辑</option>
-                  <option value="animation">动画</option>
-                  <option value="game">游戏</option>
-                  <option value="knowledge">知识</option>
-                  <option value="life">生活</option>
-                </select>
+                <div className="field-control">
+                  <select
+                    ref={categorySelectRef}
+                    id="category"
+                    className={fieldErrors.category ? 'invalid' : ''}
+                    value={categoryId}
+                    aria-invalid={Boolean(fieldErrors.category)}
+                    aria-describedby={fieldErrors.category ? 'category-error' : undefined}
+                    onChange={(event) => {
+                      const nextCategoryId = event.target.value;
+                      setCategoryId(nextCategoryId);
+                      setFieldErrors((current) => ({ ...current, category: validateCategory(nextCategoryId) || undefined }));
+                    }}
+                  >
+                    {CATEGORIES.map(([id, label]) => <option value={id} key={id}>{label}</option>)}
+                  </select>
+                  {fieldErrors.category && <p className="field-error" id="category-error" role="alert">{fieldErrors.category}</p>}
+                </div>
               </div>
-              <div className="actions"><button type="button" className="primary-button" onClick={() => void startAnalysis()}>生成标签</button></div>
-            </section>
+              <div className="actions"><button type="submit" className="primary-button">生成标签</button></div>
+            </form>
           )}
 
           {phase === 'analyzing' && (
@@ -460,7 +651,14 @@ export default function Home() {
           )}
 
           {phase === 'recommendations' && (
-            <section className="panel">
+            <form
+              className="panel"
+              noValidate
+              onSubmit={(event) => {
+                event.preventDefault();
+                void submit();
+              }}
+            >
               <div className="result-heading">
                 <div className="success-icon"><CheckIcon width="25" height="25" /></div>
                 <div>
@@ -470,7 +668,7 @@ export default function Home() {
               </div>
 
               <h3 className="block-title">已选标签 <span>{selectedTags.length}/{MAX_TAGS}</span></h3>
-              <div className="tag-editor">
+              <div className={`tag-editor ${tagError ? 'invalid' : ''}`}>
                 {selectedTags.map((tag, index) => (
                   <span className="selected-chip" key={`${tag.text}-${index}`}>
                     {index === 0 && <b>主</b>}# {tag.text}
@@ -478,14 +676,27 @@ export default function Home() {
                   </span>
                 ))}
                 <input
+                  ref={tagInputRef}
                   value={tagInput}
                   disabled={selectedTags.length >= MAX_TAGS}
-                  onChange={(event) => setTagInput(event.target.value)}
+                  maxLength={MAX_TAG_LENGTH}
+                  aria-label="添加自定义标签"
+                  aria-invalid={Boolean(tagError)}
+                  aria-describedby={tagError ? 'tag-error' : 'tag-help'}
+                  onChange={(event) => {
+                    const nextTag = event.target.value;
+                    setTagInput(nextTag);
+                    if (tagError) setTagError(nextTag ? validateTag(nextTag, selectedTags) : '');
+                  }}
+                  onBlur={() => {
+                    if (tagInput) setTagError(validateTag(tagInput, selectedTags));
+                  }}
                   onKeyDown={handleTagKeyDown}
                   placeholder={selectedTags.length >= MAX_TAGS ? '已达到标签上限' : '按回车键 Enter 创建标签，首个输入的默认为主标签'}
                 />
-                <span className="tag-counter">还可以添加 {MAX_TAGS - selectedTags.length} 个标签</span>
+                <span className="tag-counter" id="tag-help">还可以添加 {MAX_TAGS - selectedTags.length} 个标签</span>
               </div>
+              {tagError && <p className="field-error tag-error" id="tag-error" role="alert">{tagError}</p>}
 
               <h3 className="block-title">推荐标签</h3>
               <div className="recommendation-list">
@@ -511,16 +722,16 @@ export default function Home() {
 
               <div className="actions">
                 <button type="button" className="secondary-button" onClick={restart}>重新上传</button>
-                <button type="button" className="primary-button" disabled={isSubmitting} onClick={() => void submit()}>{isSubmitting ? '发布中…' : '确认并发布'}</button>
+                <button type="submit" className="primary-button" disabled={isSubmitting}>{isSubmitting ? '发布中…' : '确认并发布'}</button>
               </div>
-            </section>
+            </form>
           )}
 
           {phase === 'success' && (
             <section className="panel published">
               <div className="published-icon"><CheckIcon width="42" height="42" /></div>
               <h2>发布成功</h2>
-              <p>稿件已提交，服务端当前使用 mock 数据。</p>
+              <p>稿件已成功提交。</p>
               <div className="published-summary">
                 <span>主标签</span><strong>{selectedTags[0]?.text}</strong>
                 <span>全部标签</span><strong>{selectedTags.map((tag) => tag.text).join('、')}</strong>
@@ -531,7 +742,7 @@ export default function Home() {
           )}
         </div>
 
-        <footer className="page-footer">智能标签推荐 Demo · API 当前为 Mock 实现</footer>
+        <footer className="page-footer">智能标签推荐 · 创作中心</footer>
       </section>
     </main>
   );

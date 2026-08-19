@@ -2,6 +2,10 @@ node_modules
 .pnpm-store
 .npm-cache
 .next
+.open-next
+.wrangler
+worker-configuration.d.ts
+tsconfig.tsbuildinfo
 out
 .env*
 !.env.example

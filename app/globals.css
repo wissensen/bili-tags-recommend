@@ -175,16 +175,24 @@ button { color: inherit; }
 .form-row { display: flex; align-items: flex-start; margin-bottom: 22px; }
 .form-row > label { width: 82px; flex: 0 0 auto; padding-top: 10px; font-size: 14px; }
 .form-row label em { margin-right: 3px; color: var(--main); font-style: normal; }
+.field-control { flex: 1; min-width: 0; }
 .cover-box { display: flex; align-items: center; justify-content: center; width: 180px; height: 110px; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; color: var(--sub); background: #f4f6f8 center/cover no-repeat; cursor: pointer; transition: .18s ease; }
 .cover-box:hover { border-color: var(--primary); color: var(--primary); }
+.cover-box.invalid { border-color: var(--main); }
+.cover-box.invalid:focus-visible { outline: 3px solid rgba(245, 108, 108, .12); }
 .cover-box span { padding: 6px 14px; border-radius: 16px; color: #fff; background: rgba(0, 0, 0, .38); font-size: 13px; }
 .cover-box:not(.has-cover) span { background: #a9afb5; }
 .field { position: relative; flex: 1; }
 .field input, .form-row select { width: 100%; min-height: 42px; border: 1px solid var(--border); border-radius: 8px; outline: none; color: var(--text); background: #fff; font-size: 14px; transition: .18s ease; }
 .field input { padding: 0 55px 0 14px; }
-.field span { position: absolute; top: 50%; right: 12px; color: var(--muted); font-size: 12px; transform: translateY(-50%); }
-.form-row select { flex: 1; padding: 0 14px; cursor: pointer; }
+.field-counter { position: absolute; top: 21px; right: 12px; color: var(--muted); font-size: 12px; transform: translateY(-50%); }
+.form-row select { padding: 0 14px; cursor: pointer; }
 .field input:focus, .form-row select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0, 174, 236, .08); }
+.field.invalid input, .form-row select.invalid { border-color: var(--main); }
+.field.invalid input:focus, .form-row select.invalid:focus { box-shadow: 0 0 0 3px rgba(245, 108, 108, .1); }
+.field-help, .field-error { margin: 7px 0 0; font-size: 12px; line-height: 1.45; }
+.field-help { color: var(--muted); }
+.field-error { color: #c43f3f; }
 .actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 28px; }
 .secondary-button { min-height: 40px; padding: 0 22px; border: 1px solid var(--border); border-radius: 8px; color: var(--sub); background: #fff; font-size: 14px; cursor: pointer; transition: .18s ease; }
 .secondary-button:hover { border-color: var(--primary); color: var(--primary); }
@@ -205,9 +213,12 @@ button { color: inherit; }
 .block-title span { margin-left: auto; color: var(--muted); font-size: 12px; font-weight: 400; }
 .tag-editor { position: relative; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 48px; padding: 8px 142px 8px 12px; border: 1px solid var(--border); border-radius: 8px; transition: .18s ease; }
 .tag-editor:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0, 174, 236, .07); }
+.tag-editor.invalid { border-color: var(--main); }
+.tag-editor.invalid:focus-within { box-shadow: 0 0 0 3px rgba(245, 108, 108, .1); }
 .tag-editor input { flex: 1; min-width: 180px; border: 0; outline: 0; color: var(--text); background: transparent; font-size: 13px; }
 .tag-editor input::placeholder { color: var(--muted); }
 .tag-counter { position: absolute; right: 12px; color: var(--muted); font-size: 12px; }
+.tag-error { margin-top: 7px; }
 .selected-chip { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 0 9px; border-radius: 5px; color: #fff; background: var(--primary); font-size: 13px; }
 .selected-chip b { display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 4px; color: var(--primary-dark); background: #fff; font-size: 10px; }
 .selected-chip button { padding: 0; border: 0; color: #fff; background: transparent; cursor: pointer; font-size: 17px; line-height: 1; opacity: .85; }
@@ -247,6 +258,7 @@ button { color: inherit; }
   .dropzone { padding: 38px 12px; }
   .form-row { flex-direction: column; gap: 7px; }
   .form-row > label { width: auto; padding-top: 0; }
+  .field, .field-control { width: 100%; }
   .cover-box { width: 100%; height: 150px; }
   .tag-editor { padding-right: 12px; padding-bottom: 30px; }
   .tag-counter { right: 12px; bottom: 8px; }

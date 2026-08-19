@@ -1,0 +1,28 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "bili-tags-recommend",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-08-19",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "workers_dev": true,
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "bili-tags-recommend"
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      // D1 数据库名与 Worker 名相互独立。workers.dev 地址只跟随上面的 name。
+      "database_name": "bili-tags-recommend-db",
+      "database_id": "cfe43370-1108-4309-a077-98df54adc8e8",
+      "migrations_dir": "migrations",
+      "remote": true
+    }
+  ]
+}

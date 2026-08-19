@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { MOCK_TAG_BATCHES } from '@/lib/mock-tags';
 import type { RecommendTag, SelectedTag } from '@/lib/types';
+import { getDatabase, getVisitor, jsonWithVisitor } from '@/lib/cloudflare';
 
 export async function POST(request: Request) {
   const body = (await request.json()) as {
@@ -13,13 +14,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: { code: 'INVALID_SESSION', message: '缺少推荐会话' } }, { status: 400 });
   }
 
+  const visitor = await getVisitor(request);
+  const db = await getDatabase();
   const selected = new Set((body.selectedTags ?? []).map((tag) => tag.text.trim().toLocaleLowerCase()));
   const hasPrimary = selected.size > 0;
-  const batchIndex = Number.parseInt(body.cursor ?? '0', 10) % MOCK_TAG_BATCHES.length;
-  const orderedPool = [
-    ...MOCK_TAG_BATCHES[batchIndex],
-    ...MOCK_TAG_BATCHES.flat().filter((tag) => !MOCK_TAG_BATCHES[batchIndex].some((item) => item.candidateId === tag.candidateId)),
-  ];
+  let orderedPool: RecommendTag[];
+  let rankingVersion = 'mock-v1';
+
+  if (db) {
+    const session = await db.prepare(
+      `SELECT candidates_json, ranking_version, expires_at FROM recommendation_sessions WHERE id = ? AND owner_id = ?`,
+    ).bind(body.sessionId, visitor.ownerId).first<{ candidates_json: string; ranking_version: string; expires_at: string }>();
+    if (!session || Date.parse(session.expires_at) <= Date.now()) {
+      return jsonWithVisitor({ error: { code: 'INVALID_SESSION', message: '推荐会话不存在或已过期' } }, { status: 404 }, visitor);
+    }
+    orderedPool = JSON.parse(session.candidates_json) as RecommendTag[];
+    rankingVersion = session.ranking_version;
+  } else {
+    const batchIndex = Number.parseInt(body.cursor ?? '0', 10) % MOCK_TAG_BATCHES.length;
+    orderedPool = [
+      ...MOCK_TAG_BATCHES[batchIndex],
+      ...MOCK_TAG_BATCHES.flat().filter((tag) => !MOCK_TAG_BATCHES[batchIndex].some((item) => item.candidateId === tag.candidateId)),
+    ];
+  }
 
   const tags: RecommendTag[] = [];
   for (const candidate of orderedPool) {
@@ -36,14 +53,13 @@ export async function POST(request: Request) {
     return (a.displayBadge ? priority[a.displayBadge] : 3) - (b.displayBadge ? priority[b.displayBadge] : 3);
   });
 
-  const nextIndex = (batchIndex + 1) % MOCK_TAG_BATCHES.length;
+  const nextIndex = (Number.parseInt(body.cursor ?? '0', 10) + 1) % Math.max(1, Math.ceil(orderedPool.length / 5));
 
-  // TODO: 从 recommendation_sessions 的稳定候选快照按不透明 cursor 分页。
-  return NextResponse.json({
+  return jsonWithVisitor({
     tags,
     nextCursor: String(nextIndex),
     isExhausted: false,
     cycle: nextIndex === 0 ? 1 : 0,
-    rankingVersion: 'mock-v1',
-  });
+    rankingVersion,
+  }, undefined, visitor);
 }
