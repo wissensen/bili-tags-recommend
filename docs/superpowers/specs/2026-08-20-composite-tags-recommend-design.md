@@ -156,18 +156,51 @@ buildRecommendationView(
 
 - 不接真实算法、不真实上传视频、不接第三份「置信度」JSON。
 - 前端与后端都不生成组合标签（属算法职责）。
-- 不改动访客身份、幂等、投稿落库等既有逻辑。
 - 不做 Java 后端、不做服务器部署（本次已明确排除）。
+- 不新增「简介」字段（PRD 未要求）。
 - 拖拽不引入第三方拖拽库。
 
-## 10. 影响文件
+## 10. 接口逻辑重构
 
-- `lib/mock-tags.ts` — 重构为两份候选池（atomic 按置信度排序、含唯一 primary；composite 无角标）。
+现有路由把校验、访客、DB、mock 兜底、幂等混在一起，可读性差。本次一并重构，**接口契约与字段尽量保持不变**。
+
+原则：
+
+1. **删除 `if(db)/else` 双分支**：数据库是唯一路径（当前所有环境均已绑定 D1）。移除无 DB 时的假数据兜底分支。
+2. **mock 仅保留在"扮演算法/存储"处，并统一标注**：凡是现在用假数据顶替真实算法或真实存储的地方，用统一注释 `// TODO(algo): …` 或 `// TODO(storage): …` 标出，便于将来 grep 出所有待接入点后替换。
+   - `TODO(algo)`：`analyses` 直接标 `succeeded`、写入 mock 候选标签。
+   - `TODO(storage)`：`uploads/init` 的 mock 上传地址、视频/封面真实上传。
+3. **抽公共逻辑**（真逻辑，不标 TODO）：
+   - 请求封装：统一 `getVisitor` + 响应 + cookie 处理。
+   - `withIdempotency` helper：收拢 `analyses` / `submissions` 里重复的幂等键查/存逻辑。
+   - 薄数据访问层 `lib/repository.ts`：把散落在路由里的裸 SQL 收拢成命名函数（如 `createUpload` / `verifyUpload` / `createAnalysis` / `getSession` / `saveSubmission`），路由只负责「解析入参 → 调用 → 返回」。
+   - 校验函数抽出内联逻辑。
+4. **路由文件瘦身**：每个 route 只保留解析、调用、返回三段，逻辑下沉到 lib。
+
+## 11. 数据存储形态
+
+明确最终落库形态（大文件存对象存储，数据库只存引用 + 结构化字段）：
+
+- **视频、封面**：真实场景上传至阿里云 OSS / 服务器，数据库存 **object_key**（对象在存储中的路径），不存完整 URL，也不存文件本身。读取时由「配置域名 + key」拼出 URL；私有资源可用 key 现签临时链接。现有表已是此设计（`upload_assets.object_key`、`submissions.cover_object_key`）。真实上传标 `TODO(storage)`。
+- **数据库存**：视频 key、封面 key、标题、分区、标签（主 + 副，按顺序，第 0 个为主标签）、时间戳、状态等结构化字段。
+- **本次唯一的落库改动**：`submissions` 提交时把封面 key 真正写入 `submissions.cover_object_key`（当前前端已传 `coverUrl`，后端忽略了）。前端传的封面标识按 object_key 语义处理；真实上传接入前，此值仍是 mock，标 `TODO(storage)`。
+- **不新增简介字段**；其余字段一律不动，接口契约不变。
+
+## 12. 影响文件
+
+- `lib/mock-tags.ts` — 重构为两份候选池（atomic 按置信度排序、含多个 primary；composite 无角标）。
 - `lib/types.ts` — 补充候选返回结构类型。
 - `lib/recommend.ts`（新增）— `buildRecommendationView` 纯函数。
-- `app/api/analyses/route.ts` — 会话写入 `candidates_json` + `composite_json`。
+- `lib/repository.ts`（新增）— 薄数据访问层，收拢 SQL。
+- `lib/cloudflare.ts` — 保留访客/DB 工具；配合重构精简。
+- `lib/idempotency.ts`（新增，或并入 repository）— `withIdempotency` helper。
+- `app/api/uploads/init/route.ts` — 瘦身；mock 上传地址标 `TODO(storage)`。
+- `app/api/uploads/[id]/complete/route.ts` — 瘦身；删 no-DB 分支。
+- `app/api/analyses/route.ts` — 瘦身；会话写入 `candidates_json` + `composite_json`；mock 候选标 `TODO(algo)`。
+- `app/api/analyses/[id]/route.ts` — 瘦身；删 no-DB 分支。
 - `app/api/tags/candidates/route.ts`（新增）— 拉取整包候选。
 - `app/api/tags/recommend/route.ts` — **删除**。
+- `app/api/submissions/route.ts` — 瘦身；封面 key 落库 `cover_object_key`。
 - `migrations/0002_add_composite_json.sql`（新增）。
 - `app/page.tsx` — 改用 `candidates` + 本地编排；拖拽排序；步骤返回；协议文案与外链；组合标签长度校验。
 - 测试文件（新增）。
