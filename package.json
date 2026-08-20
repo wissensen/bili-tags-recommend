@@ -8,12 +8,13 @@
     "pnpm": ">=11 <12"
   },
   "scripts": {
-    "dev": "WATCHPACK_POLLING=true next dev",
+    "dev": "pnpm d1:migrate:local && WATCHPACK_POLLING=true next dev",
     "build": "next build",
     "cf:types": "wrangler types",
     "cf:build": "opennextjs-cloudflare build",
-    "cf:dev": "opennextjs-cloudflare build && wrangler dev",
+    "cf:dev": "pnpm d1:migrate:local && opennextjs-cloudflare build && wrangler dev",
     "cf:deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "d1:migrate:local": "CI=true wrangler d1 migrations apply bili-tags-recommend-db --local",
     "start": "next start",
     "lint": "eslint ."
   },

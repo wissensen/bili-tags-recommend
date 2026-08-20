@@ -22,13 +22,8 @@ export type D1DatabaseLike = {
 const VISITOR_COOKIE = 'bili_visitor';
 
 export async function getRuntimeEnv(): Promise<RuntimeEnv> {
-  // The regular Next.js dev server has no Cloudflare request context. Avoid
-  // waiting for one there; Wrangler/OpenNext production requests do have it.
-  if (process.env.NODE_ENV === 'development') {
-    return { VISITOR_COOKIE_SECRET: process.env.VISITOR_COOKIE_SECRET };
-  }
-  // `next start` also runs with NODE_ENV=production, but it is not a
-  // Cloudflare request. OpenNext installs this global marker in a Worker.
+  // OpenNext installs this marker for Worker requests and for `next dev`
+  // after `initOpenNextCloudflareForDev()`. Plain `next start` does not.
   if (!(globalThis as Record<PropertyKey, unknown>)[Symbol.for('__cloudflare-context__')]) {
     return { VISITOR_COOKIE_SECRET: process.env.VISITOR_COOKIE_SECRET };
   }

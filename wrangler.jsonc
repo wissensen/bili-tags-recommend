@@ -19,10 +19,10 @@
     {
       "binding": "DB",
       // D1 数据库名与 Worker 名相互独立。workers.dev 地址只跟随上面的 name。
+      // 未设置 remote 时，pnpm dev / pnpm cf:dev 使用本地 D1；deploy 仍绑定下面的线上库。
       "database_name": "bili-tags-recommend-db",
       "database_id": "cfe43370-1108-4309-a077-98df54adc8e8",
-      "migrations_dir": "migrations",
-      "remote": true
+      "migrations_dir": "migrations"
     }
   ]
 }
