@@ -56,24 +56,29 @@ export async function getVisitor(request: Request) {
   const secret = env.VISITOR_COOKIE_SECRET || 'local-development-only';
   const cookie = request.headers.get('Cookie')?.match(new RegExp(`(?:^|;\\s*)${VISITOR_COOKIE}=([^;]+)`))?.[1];
 
+  // 仅 HTTPS 请求才给 cookie 加 Secure；本地 http://localhost 下加 Secure 会被浏览器丢弃，
+  // 导致后续请求认不出访客（upload/analysis 查不到自己的记录，报 404）。
+  const secure = new URL(request.url).protocol === 'https:';
+
   if (cookie) {
     const [ownerId, signature] = cookie.split('.');
-    if (ownerId && signature && signature === await sign(ownerId, secret)) return { ownerId, isNew: false };
+    if (ownerId && signature && signature === await sign(ownerId, secret)) return { ownerId, isNew: false, secure };
   }
 
-  return { ownerId: crypto.randomUUID(), isNew: true };
+  return { ownerId: crypto.randomUUID(), isNew: true, secure };
 }
 
-export async function setVisitorCookie(response: Response, ownerId: string, secret?: string) {
+export async function setVisitorCookie(response: Response, ownerId: string, secure: boolean, secret?: string) {
   const actualSecret = secret || (await getRuntimeEnv()).VISITOR_COOKIE_SECRET || 'local-development-only';
   const signature = await sign(ownerId, actualSecret);
-  response.headers.append('Set-Cookie', `${VISITOR_COOKIE}=${ownerId}.${signature}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000`);
+  const attributes = `Path=/; HttpOnly;${secure ? ' Secure;' : ''} SameSite=Lax; Max-Age=31536000`;
+  response.headers.append('Set-Cookie', `${VISITOR_COOKIE}=${ownerId}.${signature}; ${attributes}`);
   return response;
 }
 
-export async function jsonWithVisitor(body: unknown, init: ResponseInit | undefined, visitor: { ownerId: string; isNew: boolean }) {
+export async function jsonWithVisitor(body: unknown, init: ResponseInit | undefined, visitor: { ownerId: string; isNew: boolean; secure: boolean }) {
   const { NextResponse } = await import('next/server');
   const response = NextResponse.json(body, init);
-  if (visitor.isNew) await setVisitorCookie(response, visitor.ownerId);
+  if (visitor.isNew) await setVisitorCookie(response, visitor.ownerId, visitor.secure);
   return response;
 }
