@@ -1,3 +1,12 @@
+/**
+ * POST /api/uploads/:id/complete —— 确认上传完成
+ *
+ * 作用：投稿链路第 ② 步。把对应上传记录的状态置为 verified（已就绪），
+ *       之后才允许拿它去发起分析。
+ * 时机：前端「上传」完成后（当前为模拟进度条跑满后）。
+ * 入参：路径参数 :id 即上一步的 uploadId。
+ * 返回：{ uploadId, status: 'verified' }；记录不存在或不属于当前访客返回 404。
+ */
 import { getVisitor, jsonWithVisitor } from '@/lib/cloudflare';
 import { verifyUpload } from '@/lib/repository';
 

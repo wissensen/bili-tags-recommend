@@ -1,3 +1,16 @@
+/**
+ * POST /api/analyses —— 发起 AI 分析任务
+ *
+ * 作用：投稿链路第 ③ 步。为指定视频创建一次分析任务并生成推荐会话，
+ *       返回 analysisId 与建议轮询间隔 pollAfterMs。真实场景会把视频
+ *       交给算法侧；当前 mock 直接标记成功并写入候选（见 repository
+ *       的 TODO(algo)）。
+ * 时机：用户填完标题、选好分区，点「生成标签」。
+ * 入参（JSON body）：uploadId、title、categoryId，缺一返回 400；
+ *       上传须存在且已 verified，否则 404。
+ * 请求头：Idempotency-Key（防重复提交，经 withIdempotency 处理）。
+ * 返回（202）：{ analysisId, status: 'queued', pollAfterMs }。
+ */
 import { NextResponse } from 'next/server';
 import { getVisitor, jsonWithVisitor } from '@/lib/cloudflare';
 import { withIdempotency } from '@/lib/idempotency';

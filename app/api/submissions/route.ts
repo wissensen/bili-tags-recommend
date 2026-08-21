@@ -1,3 +1,15 @@
+/**
+ * POST /api/submissions —— 提交稿件（落库）
+ *
+ * 作用：投稿链路第 ⑥ 步。把稿件（视频 + 标题 + 分区 + 封面 + 标签）写入
+ *       数据库，标签按顺序存（第 0 个即主标签）。
+ * 时机：用户在推荐页选好标签，点「确认并发布」。
+ * 入参（JSON body）：uploadId、analysisId、title、categoryId、coverUrl、
+ *       tags[]。缺 title/categoryId/tags 返回 422；缺 uploadId/analysisId
+ *       返回 422；上传或分析不属于当前访客返回 404。
+ * 请求头：Idempotency-Key（防重复发布，经 withIdempotency 处理）。
+ * 返回：{ submissionId, status: 'saved' }。
+ */
 import { NextResponse } from 'next/server';
 import { getVisitor, jsonWithVisitor } from '@/lib/cloudflare';
 import { withIdempotency } from '@/lib/idempotency';
