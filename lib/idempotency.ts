@@ -9,10 +9,11 @@ export async function withIdempotency<T>(
   status: number,
   produce: () => Promise<T>,
 ): Promise<{ body: T; status: number }> {
-  const db = await getDatabase();
-  if (!key || !db) {
+  if (!key) {
     return { body: await produce(), status };
   }
+  const db = await getDatabase();
+  if (!db) throw new Error('D1 database is not bound');
 
   const previous = await db
     .prepare(
