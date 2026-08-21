@@ -13,15 +13,19 @@ import { getVisitor, jsonWithVisitor } from '@/lib/cloudflare';
 import { getSessionCandidates } from '@/lib/repository';
 
 export async function GET(request: Request) {
+  // 从 query 读取会话 id
   const sessionId = new URL(request.url).searchParams.get('sessionId');
+  // 识别访客，确保只能读自己的会话
   const visitor = await getVisitor(request);
   if (!sessionId) {
     return jsonWithVisitor({ error: { code: 'INVALID_SESSION', message: '缺少推荐会话' } }, { status: 400 }, visitor);
   }
 
+  // 读取整包候选（atomic + composite），会话过期或不存在返回 null
   const candidates = await getSessionCandidates(visitor.ownerId, sessionId);
   if (!candidates) {
     return jsonWithVisitor({ error: { code: 'INVALID_SESSION', message: '推荐会话不存在或已过期' } }, { status: 404 }, visitor);
   }
+  // 原样下发；后续「换一批」由前端本地编排，不再回后端
   return jsonWithVisitor(candidates, undefined, visitor);
 }
