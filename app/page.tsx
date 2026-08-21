@@ -204,7 +204,6 @@ export default function Home() {
   const [coverUrl, setCoverUrl] = useState('');
   const [analysisStage, setAnalysisStage] = useState(ANALYSIS_STAGES[0]);
   const [analysisId, setAnalysisId] = useState('');
-  const [sessionId, setSessionId] = useState('');
   const [cursor, setCursor] = useState(0);
   const [selectedTags, setSelectedTags] = useState<SelectedTag[]>([]);
   const [atomicPool, setAtomicPool] = useState<RecommendTag[]>([]);
@@ -339,7 +338,6 @@ export default function Home() {
       }
 
       const status = await readResponse<AnalysisStatusResponse>(await fetch(`/api/analyses/${analysis.analysisId}`));
-      setSessionId(status.sessionId);
       const candidates = await readResponse<CandidatesApiResponse>(
         await fetch(`/api/tags/candidates?sessionId=${encodeURIComponent(status.sessionId)}`),
       );
@@ -457,7 +455,6 @@ export default function Home() {
     setCoverFile(null);
     setCoverUrl('');
     setAnalysisId('');
-    setSessionId('');
     setCursor(0);
     setSelectedTags([]);
     setAtomicPool([]);
@@ -731,7 +728,7 @@ export default function Home() {
               <h3 className="block-title">推荐标签</h3>
               <div className="recommendation-list">
                 {recommendations.map((tag) => {
-                  const isSelected = selectedTags.some((selected) => selected.text === tag.text);
+                  const isSelected = selectedTags.some((selected) => tagIdentity(selected.text) === tagIdentity(tag.text));
                   return (
                     <button
                       type="button"
