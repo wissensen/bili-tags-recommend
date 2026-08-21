@@ -371,6 +371,18 @@ export default function Home() {
     setTagError('');
   }
 
+  function moveTag(from: number, to: number) {
+    if (from === to || from < 0 || to < 0) return;
+    setSelectedTags((current) => {
+      if (from >= current.length || to >= current.length) return current;
+      const next = [...current];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+    setTagError('');
+  }
+
   function handleTagKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
     event.preventDefault();
@@ -665,7 +677,20 @@ export default function Home() {
               <h3 className="block-title">已选标签 <span>{selectedTags.length}/{MAX_TAGS}</span></h3>
               <div className={`tag-editor ${tagError ? 'invalid' : ''}`}>
                 {selectedTags.map((tag, index) => (
-                  <span className="selected-chip" key={`${tag.text}-${index}`}>
+                  <span
+                    className={`selected-chip ${dragIndex === index ? 'dragging' : ''}`}
+                    key={`${tag.text}-${index}`}
+                    draggable
+                    onDragStart={() => setDragIndex(index)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      if (dragIndex !== null) moveTag(dragIndex, index);
+                      setDragIndex(null);
+                    }}
+                    onDragEnd={() => setDragIndex(null)}
+                    title="拖拽可调整顺序，首个为主标签"
+                  >
                     {index === 0 && <b>主</b>}# {tag.text}
                     <button type="button" onClick={() => removeTag(index)} aria-label={`删除${tag.text}`}>×</button>
                   </span>

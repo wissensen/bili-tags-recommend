@@ -248,6 +248,9 @@ button { color: inherit; }
 
 .page-footer { margin-top: 18px; text-align: center; color: #b0b4b9; font-size: 11px; }
 
+.selected-chip[draggable='true'] { cursor: grab; }
+.selected-chip.dragging { opacity: 0.5; }
+
 @media (max-width: 720px) {
   .page-shell { padding: 24px 12px; }
   .main-card { min-height: auto; padding: 22px 16px; border-radius: 14px; }
