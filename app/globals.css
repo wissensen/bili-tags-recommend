@@ -251,6 +251,9 @@ button { color: inherit; }
 .selected-chip[draggable='true'] { cursor: grab; }
 .selected-chip.dragging { opacity: 0.5; }
 
+.agreement a { color: var(--primary); text-decoration: none; }
+.agreement a:hover { text-decoration: underline; }
+
 @media (max-width: 720px) {
   .page-shell { padding: 24px 12px; }
   .main-card { min-height: auto; padding: 22px 16px; border-radius: 14px; }

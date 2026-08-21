@@ -534,7 +534,14 @@ export default function Home() {
                 <span className="choose-button">选择视频文件</span>
               </div>
               <input ref={fileInputRef} className="sr-only" type="file" accept=".mp4,.mov,.mkv,video/mp4,video/quicktime,video/x-matroska" onChange={handleFileChange} />
-              <p className="agreement">上传即代表你已阅读并同意《创作公约》</p>
+              <p className="agreement">
+                上传视频，即表示您已同意{' '}
+                <a href="https://www.bilibili.com/protocal/licence.html" target="_blank" rel="noopener noreferrer">哔哩哔哩使用协议</a>
+                {' '}与{' '}
+                <a href="https://member.bilibili.com/platform/convention/?search=q0" target="_blank" rel="noopener noreferrer">哔哩哔哩社区公约</a>
+                ，请勿上传色情、反动等违法视频，{' '}
+                <a href="https://www.bilibili.com/blackboard/blackroom.html" target="_blank" rel="noopener noreferrer">查看社区规则</a>
+              </p>
             </section>
           )}
 
