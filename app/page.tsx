@@ -644,7 +644,10 @@ export default function Home() {
                   {fieldErrors.category && <p className="field-error" id="category-error" role="alert">{fieldErrors.category}</p>}
                 </div>
               </div>
-              <div className="actions"><button type="submit" className="primary-button">生成标签</button></div>
+              <div className="actions">
+                <button type="button" className="secondary-button" onClick={() => setPhase('upload')}>返回上一步</button>
+                <button type="submit" className="primary-button">生成标签</button>
+              </div>
             </form>
           )}
 
@@ -741,7 +744,7 @@ export default function Home() {
               </div>
 
               <div className="actions">
-                <button type="button" className="secondary-button" onClick={restart}>重新上传</button>
+                <button type="button" className="secondary-button" onClick={() => setPhase('settings')}>返回上一步</button>
                 <button type="submit" className="primary-button" disabled={isSubmitting}>{isSubmitting ? '发布中…' : '确认并发布'}</button>
               </div>
             </form>
