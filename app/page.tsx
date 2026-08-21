@@ -170,14 +170,21 @@ function validateTag(value: string, selectedTags: SelectedTag[], skipLength = fa
   return '';
 }
 
-function createIdempotencyKey() {
-  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+// 用请求内容的 SHA-256 作为幂等键：内容相同 → 键相同（失败重试/重复点击自动去重），
+// 内容变化（改了标题、标签等）→ 新键，被后端当作新操作。
+async function idempotencyKeyFor(payload: unknown) {
+  const text = JSON.stringify(payload);
+  if (crypto.subtle) {
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  }
 
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  bytes[6] = (bytes[6] & 0x0f) | 0x40;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  const value = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
+  // 兜底：极少数无 crypto.subtle 的环境用简单字符串哈希
+  let hash = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    hash = (Math.imul(31, hash) + text.charCodeAt(i)) | 0;
+  }
+  return `fallback-${(hash >>> 0).toString(16)}`;
 }
 
 async function readResponse<T>(response: Response): Promise<T> {
@@ -323,11 +330,12 @@ export default function Home() {
 
     setPhase('analyzing');
     try {
+      const analysisPayload = { uploadId, title: title.trim(), categoryId };
       const analysis = await readResponse<AnalysisResponse>(
         await fetch('/api/analyses', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': createIdempotencyKey() },
-          body: JSON.stringify({ uploadId, title: title.trim(), categoryId }),
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': await idempotencyKeyFor(analysisPayload) },
+          body: JSON.stringify(analysisPayload),
         }),
       );
       setAnalysisId(analysis.analysisId);
@@ -421,18 +429,19 @@ export default function Home() {
     }
     setIsSubmitting(true);
     try {
+      const submissionPayload = {
+        uploadId,
+        analysisId,
+        title: title.trim(),
+        categoryId,
+        coverUrl: coverUrl || undefined,
+        tags: tagsToSubmit,
+      };
       const result = await readResponse<SubmissionResponse>(
         await fetch('/api/submissions', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': createIdempotencyKey() },
-          body: JSON.stringify({
-            uploadId,
-            analysisId,
-            title: title.trim(),
-            categoryId,
-            coverUrl: coverUrl || undefined,
-            tags: tagsToSubmit,
-          }),
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': await idempotencyKeyFor(submissionPayload) },
+          body: JSON.stringify(submissionPayload),
         }),
       );
       setSubmissionId(result.submissionId);
