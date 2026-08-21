@@ -2,7 +2,8 @@
 
 import { useRef, useState } from 'react';
 import type { ChangeEvent, DragEvent, KeyboardEvent, SVGProps } from 'react';
-import type { Badge, RecommendTag, SelectedTag } from '@/lib/types';
+import type { Badge, CandidatesResponse, RecommendTag, SelectedTag } from '@/lib/types';
+import { buildRecommendationView } from '@/lib/recommend';
 
 const MAX_TAGS = 10;
 const MAX_TAG_LENGTH = 20;
@@ -34,7 +35,7 @@ type FieldErrors = Partial<Record<'cover' | 'title' | 'category', string>>;
 type UploadInitResponse = { uploadId: string };
 type AnalysisResponse = { analysisId: string };
 type AnalysisStatusResponse = { status: 'succeeded'; sessionId: string };
-type RecommendationResponse = { tags: RecommendTag[]; nextCursor?: string };
+type CandidatesApiResponse = CandidatesResponse;
 type SubmissionResponse = { submissionId: string };
 
 function UploadIcon(props: SVGProps<SVGSVGElement>) {
@@ -159,10 +160,10 @@ function tagIdentity(value: string) {
   return normalizeTag(value).normalize('NFKC').toLocaleLowerCase('zh-CN');
 }
 
-function validateTag(value: string, selectedTags: SelectedTag[]) {
+function validateTag(value: string, selectedTags: SelectedTag[], skipLength = false) {
   const normalized = normalizeTag(value);
   if (!normalized) return '请输入标签内容';
-  if (Array.from(normalized).length > MAX_TAG_LENGTH) return `单个标签不能超过 ${MAX_TAG_LENGTH} 个字`;
+  if (!skipLength && Array.from(normalized).length > MAX_TAG_LENGTH) return `单个标签不能超过 ${MAX_TAG_LENGTH} 个字`;
   if (/[#，,\r\n]/.test(normalized)) return '标签中不能包含 #、逗号或换行';
   if (selectedTags.some((tag) => tagIdentity(tag.text) === tagIdentity(normalized))) return '该标签已添加';
   if (selectedTags.length >= MAX_TAGS) return `最多添加 ${MAX_TAGS} 个标签`;
@@ -204,9 +205,11 @@ export default function Home() {
   const [analysisStage, setAnalysisStage] = useState(ANALYSIS_STAGES[0]);
   const [analysisId, setAnalysisId] = useState('');
   const [sessionId, setSessionId] = useState('');
-  const [cursor, setCursor] = useState<string | undefined>();
+  const [cursor, setCursor] = useState(0);
   const [selectedTags, setSelectedTags] = useState<SelectedTag[]>([]);
-  const [recommendations, setRecommendations] = useState<RecommendTag[]>([]);
+  const [atomicPool, setAtomicPool] = useState<RecommendTag[]>([]);
+  const [compositePool, setCompositePool] = useState<RecommendTag[]>([]);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [tagInput, setTagInput] = useState('');
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [tagError, setTagError] = useState('');
@@ -214,6 +217,8 @@ export default function Home() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionId, setSubmissionId] = useState('');
   const [error, setError] = useState('');
+
+  const recommendations = buildRecommendationView(atomicPool, compositePool, { selectedTags, cursor }).tags;
 
   const activeStep = phase === 'upload' || phase === 'uploading' ? 1 : phase === 'settings' ? 2 : phase === 'analyzing' ? 3 : 4;
 
@@ -299,18 +304,6 @@ export default function Home() {
     setFieldErrors((current) => ({ ...current, cover: undefined }));
   }
 
-  async function requestRecommendations(nextSessionId: string, nextCursor?: string) {
-    const data = await readResponse<RecommendationResponse>(
-      await fetch('/api/tags/recommend', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: nextSessionId, cursor: nextCursor, selectedTags, pageSize: 5 }),
-      }),
-    );
-    setRecommendations(data.tags);
-    setCursor(data.nextCursor);
-  }
-
   async function startAnalysis() {
     setError('');
     const nextErrors: FieldErrors = {
@@ -347,7 +340,12 @@ export default function Home() {
 
       const status = await readResponse<AnalysisStatusResponse>(await fetch(`/api/analyses/${analysis.analysisId}`));
       setSessionId(status.sessionId);
-      await requestRecommendations(status.sessionId);
+      const candidates = await readResponse<CandidatesApiResponse>(
+        await fetch(`/api/tags/candidates?sessionId=${encodeURIComponent(status.sessionId)}`),
+      );
+      setAtomicPool(candidates.atomic);
+      setCompositePool(candidates.composite);
+      setCursor(0);
       setPhase('recommendations');
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : '分析失败，请重试');
@@ -355,8 +353,8 @@ export default function Home() {
     }
   }
 
-  function addTag(text: string, candidateId?: string) {
-    const validationError = validateTag(text, selectedTags);
+  function addTag(text: string, candidateId?: string, skipLength = false) {
+    const validationError = validateTag(text, selectedTags, skipLength);
     if (validationError) {
       setTagError(validationError);
       return false;
@@ -379,17 +377,12 @@ export default function Home() {
     if (addTag(tagInput)) setTagInput('');
   }
 
-  async function refreshRecommendations() {
-    if (!sessionId || isRefreshing) return;
+  function refreshRecommendations() {
+    if (isRefreshing) return;
     setIsRefreshing(true);
     setError('');
-    try {
-      await requestRecommendations(sessionId, cursor);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : '刷新推荐失败');
-    } finally {
-      window.setTimeout(() => setIsRefreshing(false), 450);
-    }
+    setCursor((current) => current + 1);
+    window.setTimeout(() => setIsRefreshing(false), 450);
   }
 
   async function submit() {
@@ -453,9 +446,11 @@ export default function Home() {
     setCoverUrl('');
     setAnalysisId('');
     setSessionId('');
-    setCursor(undefined);
+    setCursor(0);
     setSelectedTags([]);
-    setRecommendations([]);
+    setAtomicPool([]);
+    setCompositePool([]);
+    setDragIndex(null);
     setTagInput('');
     setFieldErrors({});
     setTagError('');
@@ -708,14 +703,14 @@ export default function Home() {
                       className="recommend-pill"
                       disabled={isSelected || selectedTags.length >= MAX_TAGS}
                       key={tag.candidateId}
-                      onClick={() => addTag(tag.text, tag.candidateId)}
+                      onClick={() => addTag(tag.text, tag.candidateId, true)}
                     >
                       {tag.text}
                       {tag.displayBadge && <ValueBadge badge={tag.displayBadge} />}
                     </button>
                   );
                 })}
-                <button type="button" className={`refresh-button ${isRefreshing ? 'spinning' : ''}`} disabled={isRefreshing} onClick={() => void refreshRecommendations()}>
+                <button type="button" className={`refresh-button ${isRefreshing ? 'spinning' : ''}`} disabled={isRefreshing} onClick={refreshRecommendations}>
                   <RefreshIcon width="15" height="15" />换一批
                 </button>
               </div>
