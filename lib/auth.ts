@@ -63,3 +63,13 @@ export async function getUser(request: Request): Promise<{ userId: string } | nu
   const userId = await getUserIdBySession(token);
   return userId ? { userId } : null;
 }
+
+import { NextResponse } from 'next/server';
+
+export async function requireUser(request: Request): Promise<{ userId: string } | Response> {
+  const user = await getUser(request);
+  if (!user) {
+    return NextResponse.json({ error: { code: 'UNAUTHORIZED', message: '请先登录' } }, { status: 401 });
+  }
+  return user;
+}
