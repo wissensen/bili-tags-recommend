@@ -202,6 +202,7 @@ export default function Home() {
   const titleInputRef = useRef<HTMLInputElement>(null);
   const categorySelectRef = useRef<HTMLSelectElement>(null);
   const tagInputRef = useRef<HTMLInputElement>(null);
+  const polishAbortRef = useRef<AbortController | null>(null);
   const [phase, setPhase] = useState<Phase>('upload');
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -361,7 +362,15 @@ export default function Home() {
   }
 
   async function polish() {
-    if (!coverFile || isPolishing) return;
+    if (!coverFile) return;
+    // 润色进行中再次点击 → 停止本次请求
+    if (isPolishing) {
+      polishAbortRef.current?.abort();
+      return;
+    }
+
+    const controller = new AbortController();
+    polishAbortRef.current = controller;
     setIsPolishing(true);
     setError('');
     try {
@@ -370,14 +379,19 @@ export default function Home() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ coverDataUrl, title: title.trim() || undefined, summary: summary.trim() || undefined }),
+        signal: controller.signal,
       });
       const data = (await res.json()) as { title?: string; summary?: string; error?: { message?: string } };
       if (!res.ok) throw new Error(data.error?.message ?? 'AI 暂不可用，请稍后手动重试');
       if (data.title) setTitle(data.title.slice(0, MAX_TITLE_LENGTH));
       if (typeof data.summary === 'string') setSummary(data.summary.slice(0, MAX_SUMMARY_LENGTH));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'AI 暂不可用，请稍后手动重试');
+      // 用户主动停止不算错误，不弹提示
+      if (!(err instanceof DOMException && err.name === 'AbortError')) {
+        setError(err instanceof Error ? err.message : 'AI 暂不可用，请稍后手动重试');
+      }
     } finally {
+      polishAbortRef.current = null;
       setIsPolishing(false);
     }
   }
@@ -744,25 +758,32 @@ export default function Home() {
                 <div className="field">
                   <textarea
                     id="summary"
+                    className="field-textarea"
                     value={summary}
                     maxLength={MAX_SUMMARY_LENGTH}
-                    rows={3}
+                    rows={6}
                     placeholder="选填，可点「一键润色」由 AI 据封面生成"
                     onChange={(event) => setSummary(event.target.value)}
                   />
-                  <span className="field-counter">{Array.from(summary).length}/{MAX_SUMMARY_LENGTH}</span>
+                  <span className="field-counter textarea-counter">{Array.from(summary).length}/{MAX_SUMMARY_LENGTH}</span>
                 </div>
               </div>
               <div className="form-row">
                 <span className="label-spacer" />
-                <button
-                  type="button"
-                  className="polish-button"
-                  disabled={!coverFile || isPolishing}
-                  onClick={() => void polish()}
+                <span
+                  className="polish-wrap"
+                  title={!coverFile ? '请先添加封面后再使用一键润色' : undefined}
                 >
-                  {isPolishing ? 'AI 润色中…' : '✨ 一键润色'}
-                </button>
+                  <button
+                    type="button"
+                    className={`polish-button ${isPolishing ? 'stopping' : ''}`}
+                    disabled={!coverFile}
+                    aria-disabled={!coverFile}
+                    onClick={() => void polish()}
+                  >
+                    {isPolishing ? '⏹ 点击停止' : '✨ 一键润色'}
+                  </button>
+                </span>
               </div>
               <div className="actions">
                 <button type="button" className="secondary-button" onClick={() => setPhase('upload')}>返回上一步</button>

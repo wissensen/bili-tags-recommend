@@ -287,6 +287,13 @@ button { color: inherit; }
   .published-summary { grid-template-columns: 68px 1fr; padding: 16px; }
 }
 
-.polish-button { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border: 1px solid var(--primary, #00aeec); color: var(--primary, #00aeec); background: #fff; border-radius: 6px; cursor: pointer; font-size: 14px; }
-.polish-button:disabled { opacity: .5; cursor: default; }
+/* 简介多行输入：与标题/分区输入框风格统一，宽度一致，5~6 行高 */
+.field-textarea { width: 100%; min-height: 132px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; outline: none; color: var(--text); background: #fff; font-size: 14px; font-family: inherit; line-height: 1.6; resize: vertical; transition: .18s ease; }
+.field-textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0, 174, 236, .08); }
+.field-counter.textarea-counter { top: auto; bottom: 10px; right: 12px; transform: none; background: #fff; padding-left: 4px; }
+
+.polish-wrap { display: inline-flex; }
+.polish-button { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border: 1px solid var(--primary, #00aeec); color: var(--primary, #00aeec); background: #fff; border-radius: 6px; cursor: pointer; font-size: 14px; transition: .18s ease; }
+.polish-button:disabled { opacity: .5; cursor: not-allowed; }
+.polish-button.stopping { border-color: var(--main, #f56c6c); color: var(--main, #f56c6c); }
 .label-spacer { width: 82px; flex-shrink: 0; }
