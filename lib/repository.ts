@@ -141,6 +141,7 @@ export async function saveSubmission(
     title: string;
     categoryId: string;
     coverObjectKey: string | null;
+    summary: string | null;
     tags: Array<{ text: string; candidateId?: string }>;
   },
 ): Promise<string> {
@@ -150,10 +151,10 @@ export async function saveSubmission(
   // TODO(storage): cover_object_key 目前来自前端本地 URL，真实场景应为 OSS 回填的对象键。
   await database
     .prepare(
-      `INSERT INTO submissions (id, owner_id, upload_id, analysis_id, title, category_id, cover_object_key, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'saved', ?, ?)`,
+      `INSERT INTO submissions (id, owner_id, upload_id, analysis_id, title, category_id, cover_object_key, summary, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'saved', ?, ?)`,
     )
-    .bind(submissionId, ownerId, input.uploadId, input.analysisId, input.title, input.categoryId, input.coverObjectKey, now, now)
+    .bind(submissionId, ownerId, input.uploadId, input.analysisId, input.title, input.categoryId, input.coverObjectKey, input.summary, now, now)
     .run();
   await database.batch(
     input.tags.slice(0, 10).map((tag, position) =>
