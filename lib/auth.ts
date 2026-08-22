@@ -1,3 +1,5 @@
+import { getUserIdBySession } from './repository';
+
 const PBKDF2_ITERATIONS = 100_000;
 const KEY_BYTES = 32;
 const SALT_BYTES = 16;
@@ -38,4 +40,26 @@ export async function verifyPassword(password: string, hash: string, salt: strin
     diff |= candidate.charCodeAt(i) ^ hash.charCodeAt(i);
   }
   return diff === 0;
+}
+
+export const SESSION_COOKIE = 'bili_session';
+const MAX_AGE = 30 * 24 * 60 * 60;
+
+export function isSecureRequest(request: Request): boolean {
+  return new URL(request.url).protocol === 'https:';
+}
+
+export function sessionCookieHeader(token: string, secure: boolean): string {
+  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly;${secure ? ' Secure;' : ''} SameSite=Lax; Max-Age=${MAX_AGE}`;
+}
+
+export function clearSessionCookieHeader(secure: boolean): string {
+  return `${SESSION_COOKIE}=; Path=/; HttpOnly;${secure ? ' Secure;' : ''} SameSite=Lax; Max-Age=0`;
+}
+
+export async function getUser(request: Request): Promise<{ userId: string } | null> {
+  const token = request.headers.get('Cookie')?.match(new RegExp(`(?:^|;\\s*)${SESSION_COOKIE}=([^;]+)`))?.[1];
+  if (!token) return null;
+  const userId = await getUserIdBySession(token);
+  return userId ? { userId } : null;
 }

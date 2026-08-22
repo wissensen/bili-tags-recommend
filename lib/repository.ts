@@ -164,3 +164,55 @@ export async function saveSubmission(
   );
   return submissionId;
 }
+
+export async function createUser(username: string, hash: string, salt: string): Promise<string> {
+  const id = crypto.randomUUID();
+  await (await db())
+    .prepare(`INSERT INTO users (id, username, password_hash, password_salt, created_at) VALUES (?, ?, ?, ?, ?)`)
+    .bind(id, username, hash, salt, new Date().toISOString())
+    .run();
+  return id;
+}
+
+export async function findUserByName(
+  username: string,
+): Promise<{ id: string; passwordHash: string; passwordSalt: string } | null> {
+  const row = await (await db())
+    .prepare(`SELECT id, password_hash, password_salt FROM users WHERE username = ?`)
+    .bind(username)
+    .first<{ id: string; password_hash: string; password_salt: string }>();
+  if (!row) return null;
+  return { id: row.id, passwordHash: row.password_hash, passwordSalt: row.password_salt };
+}
+
+export async function findUsernameById(userId: string): Promise<string | null> {
+  const row = await (await db())
+    .prepare(`SELECT username FROM users WHERE id = ?`)
+    .bind(userId)
+    .first<{ username: string }>();
+  return row?.username ?? null;
+}
+
+export async function createSession(userId: string): Promise<string> {
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  await (await db())
+    .prepare(`INSERT INTO sessions (id, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)`)
+    .bind(id, userId, now, expires)
+    .run();
+  return id;
+}
+
+export async function getUserIdBySession(token: string): Promise<string | null> {
+  const row = await (await db())
+    .prepare(`SELECT user_id, expires_at FROM sessions WHERE id = ?`)
+    .bind(token)
+    .first<{ user_id: string; expires_at: string }>();
+  if (!row || Date.parse(row.expires_at) <= Date.now()) return null;
+  return row.user_id;
+}
+
+export async function deleteSession(token: string): Promise<void> {
+  await (await db()).prepare(`DELETE FROM sessions WHERE id = ?`).bind(token).run();
+}
