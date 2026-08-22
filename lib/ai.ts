@@ -29,7 +29,11 @@ export async function polishMetadata(input: {
   summary?: string;
 }): Promise<{ title: string; summary: string }> {
   const apiKey = process.env.DASHSCOPE_API_KEY;
-  if (!apiKey) throw new Error('AI_NOT_CONFIGURED');
+  if (!apiKey || !process.env.DASHSCOPE_WORKSPACE_ID) {
+    console.error('[ai.polish] AI_NOT_CONFIGURED：未读到 DASHSCOPE_API_KEY/DASHSCOPE_WORKSPACE_ID。' +
+      'next dev 读 .env.local；wrangler/cf:dev 读 .dev.vars；线上用 wrangler secret。');
+    throw new Error('AI_NOT_CONFIGURED');
+  }
   const endpoint = resolveEndpoint();
 
   const prompt = [
