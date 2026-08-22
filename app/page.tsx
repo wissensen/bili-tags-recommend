@@ -232,7 +232,7 @@ export default function Home() {
 
   const router = useRouter();
   useEffect(() => {
-    fetch('/api/auth/me')
+    fetch('/api/auth/me', { cache: 'no-store' })
       .then((res) => (res.ok ? res.json() : Promise.reject()))
       .then((data: { username: string }) => { setCurrentUser(data.username); setAuthChecked(true); })
       .catch(() => router.replace('/login'));

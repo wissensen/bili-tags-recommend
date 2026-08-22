@@ -1,10 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -23,7 +21,11 @@ export default function LoginPage() {
       });
       const data = (await res.json()) as { error?: { message?: string } };
       if (!res.ok) throw new Error(data.error?.message ?? '操作失败');
-      router.push('/');
+      // 硬跳转（整页加载）而非 router.push 软跳转：确保会话 cookie 已写入后，
+      // 主页的 /api/auth/me 校验才执行，避免登录后被误判未登录而弹回。软跳转在
+      // 此处会与 cookie 写入产生竞态，故有意使用整页导航。
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.href = '/';
     } catch (err) {
       setError(err instanceof Error ? err.message : '操作失败');
     } finally {
