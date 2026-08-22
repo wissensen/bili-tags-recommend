@@ -9,6 +9,7 @@ import { buildRecommendationView } from '@/lib/recommend';
 const MAX_TAGS = 10;
 const MAX_TAG_LENGTH = 20;
 const MAX_TITLE_LENGTH = 80;
+const MAX_SUMMARY_LENGTH = 300;
 const MAX_FILE_BYTES = 100 * 1024 * 1024;
 const MAX_COVER_BYTES = 5 * 1024 * 1024;
 const ANALYSIS_STAGES = ['解析视频画面…', '识别语音与字幕…', '匹配热点与分区…', '生成推荐标签…'];
@@ -207,6 +208,7 @@ export default function Home() {
   const [uploadId, setUploadId] = useState('');
   const [progress, setProgress] = useState(0);
   const [title, setTitle] = useState('');
+  const [summary, setSummary] = useState('');
   const [categoryId, setCategoryId] = useState('vlog');
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverUrl, setCoverUrl] = useState('');
@@ -222,6 +224,7 @@ export default function Home() {
   const [tagError, setTagError] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPolishing, setIsPolishing] = useState(false);
   const [submissionId, setSubmissionId] = useState('');
   const [error, setError] = useState('');
   const [currentUser, setCurrentUser] = useState<string | null>(null);
@@ -324,6 +327,37 @@ export default function Home() {
     setCoverFile(image);
     setCoverUrl(URL.createObjectURL(image));
     setFieldErrors((current) => ({ ...current, cover: undefined }));
+  }
+
+  function fileToDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('封面读取失败'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function polish() {
+    if (!coverFile || isPolishing) return;
+    setIsPolishing(true);
+    setError('');
+    try {
+      const coverDataUrl = await fileToDataUrl(coverFile);
+      const res = await fetch('/api/ai/polish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ coverDataUrl, title: title.trim() || undefined, summary: summary.trim() || undefined }),
+      });
+      const data = (await res.json()) as { title?: string; summary?: string; error?: { message?: string } };
+      if (!res.ok) throw new Error(data.error?.message ?? 'AI 暂不可用，请稍后手动重试');
+      if (data.title) setTitle(data.title.slice(0, MAX_TITLE_LENGTH));
+      if (typeof data.summary === 'string') setSummary(data.summary.slice(0, MAX_SUMMARY_LENGTH));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'AI 暂不可用，请稍后手动重试');
+    } finally {
+      setIsPolishing(false);
+    }
   }
 
   async function startAnalysis() {
@@ -451,6 +485,7 @@ export default function Home() {
         title: title.trim(),
         categoryId,
         coverUrl: coverUrl || undefined,
+        summary: summary.trim() || undefined,
         tags: tagsToSubmit,
       };
       const result = await readResponse<SubmissionResponse>(
@@ -476,6 +511,7 @@ export default function Home() {
     setUploadId('');
     setProgress(0);
     setTitle('');
+    setSummary('');
     setCategoryId('vlog');
     setCoverFile(null);
     setCoverUrl('');
@@ -680,6 +716,31 @@ export default function Home() {
                   </select>
                   {fieldErrors.category && <p className="field-error" id="category-error" role="alert">{fieldErrors.category}</p>}
                 </div>
+              </div>
+              <div className="form-row">
+                <label htmlFor="summary">简介</label>
+                <div className="field">
+                  <textarea
+                    id="summary"
+                    value={summary}
+                    maxLength={MAX_SUMMARY_LENGTH}
+                    rows={3}
+                    placeholder="选填，可点「一键润色」由 AI 据封面生成"
+                    onChange={(event) => setSummary(event.target.value)}
+                  />
+                  <span className="field-counter">{Array.from(summary).length}/{MAX_SUMMARY_LENGTH}</span>
+                </div>
+              </div>
+              <div className="form-row">
+                <span className="label-spacer" />
+                <button
+                  type="button"
+                  className="polish-button"
+                  disabled={!coverFile || isPolishing}
+                  onClick={() => void polish()}
+                >
+                  {isPolishing ? 'AI 润色中…' : '✨ 一键润色'}
+                </button>
               </div>
               <div className="actions">
                 <button type="button" className="secondary-button" onClick={() => setPhase('upload')}>返回上一步</button>

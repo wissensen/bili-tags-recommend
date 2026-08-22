@@ -286,3 +286,7 @@ button { color: inherit; }
   .actions button { flex: 1; }
   .published-summary { grid-template-columns: 68px 1fr; padding: 16px; }
 }
+
+.polish-button { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border: 1px solid var(--primary, #00aeec); color: var(--primary, #00aeec); background: #fff; border-radius: 6px; cursor: pointer; font-size: 14px; }
+.polish-button:disabled { opacity: .5; cursor: default; }
+.label-spacer { width: 82px; flex-shrink: 0; }
