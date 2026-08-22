@@ -1,7 +1,12 @@
 export const QWEN_VL_MODEL = 'qwen3.7-plus'; // TODO(algo): 核对百炼上 Qwen3-VL-27B 的准确模型名
-export const WorkspaceId = 'ws-p1tf3r4mnbpdzsfe';
-const ENDPOINT = `https://${WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions`;
 const TIMEOUT_MS = 30_000;
+
+// 业务空间专属 MaaS 端点：workspace id 从环境变量读取，不硬编码进源码。
+function resolveEndpoint(): string {
+  const workspaceId = process.env.DASHSCOPE_WORKSPACE_ID;
+  if (!workspaceId) throw new Error('AI_NOT_CONFIGURED');
+  return `https://${workspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions`;
+}
 
 export function parsePolishResult(raw: string): { title: string; summary: string } {
   const match = raw.match(/\{[\s\S]*\}/);
@@ -25,6 +30,7 @@ export async function polishMetadata(input: {
 }): Promise<{ title: string; summary: string }> {
   const apiKey = process.env.DASHSCOPE_API_KEY;
   if (!apiKey) throw new Error('AI_NOT_CONFIGURED');
+  const endpoint = resolveEndpoint();
 
   const prompt = [
     '你是视频投稿助手。请根据封面图片，为视频润色或生成标题与简介。',
@@ -37,7 +43,7 @@ export async function polishMetadata(input: {
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   let res: Response;
   try {
-    res = await fetch(ENDPOINT, {
+    res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({

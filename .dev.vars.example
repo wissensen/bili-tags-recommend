@@ -1,0 +1,8 @@
+# 本地开发环境变量（Cloudflare wrangler 读取）
+# 复制本文件为 .dev.vars 并填入真实值；.dev.vars 已被 .gitignore 排除，不会提交。
+# 线上部署时改用：pnpm wrangler secret put <NAME>
+
+# 阿里云百炼 API Key
+DASHSCOPE_API_KEY=your-dashscope-api-key
+# 阿里云百炼业务空间 ID（用于拼接 MaaS 端点）
+DASHSCOPE_WORKSPACE_ID=ws-xxxxxxxx
