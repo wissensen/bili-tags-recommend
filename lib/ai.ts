@@ -1,5 +1,5 @@
 export const QWEN_VL_MODEL = 'qwen3.7-plus'; // TODO(algo): 核对百炼上 Qwen3-VL-27B 的准确模型名
-const TIMEOUT_MS = 30_000;
+const TIMEOUT_MS = 60_000;
 
 // 业务空间专属 MaaS 端点：workspace id 从环境变量读取，不硬编码进源码。
 function resolveEndpoint(): string {
@@ -52,6 +52,9 @@ export async function polishMetadata(input: {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
         model: QWEN_VL_MODEL,
+        // 关闭思维链：润色是简单任务，开启 thinking 会让模型先生成大段推理，
+        // 实测耗时从 ~2.5s 飙到 40s+ 从而超时。关闭后快且仍返回规范 JSON。
+        enable_thinking: false,
         messages: [
           {
             role: 'user',
