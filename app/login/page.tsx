@@ -34,18 +34,72 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="auth-shell">
-      <form className="auth-card" onSubmit={submit}>
-        <h1>{mode === 'login' ? '登录' : '注册'}</h1>
-        <div className="auth-tabs">
-          <button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => setMode('login')}>登录</button>
-          <button type="button" className={mode === 'register' ? 'active' : ''} onClick={() => setMode('register')}>注册</button>
-        </div>
-        {error && <p className="auth-error" role="alert">{error}</p>}
-        <label>用户名<input value={username} maxLength={32} onChange={(e) => setUsername(e.target.value)} required /></label>
-        <label>密码<input type="password" value={password} minLength={6} onChange={(e) => setPassword(e.target.value)} required /></label>
-        <button type="submit" className="auth-submit" disabled={busy}>{busy ? '处理中…' : mode === 'login' ? '登录' : '注册'}</button>
-      </form>
+    <main className="page-shell auth-shell">
+      <div className="ambient ambient-one" />
+      <div className="ambient ambient-two" />
+
+      <section className="auth-wrap">
+        <header className="page-heading">
+          <div className="brand-mark">创作中心</div>
+          <h1>
+            登录 · <span>AI 智能标签推荐</span>
+          </h1>
+          <p>登录后即可上传视频、获取 AI 推荐标签</p>
+        </header>
+
+        <form className="main-card auth-card" onSubmit={submit}>
+          <div className="auth-tabs">
+            <button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => setMode('login')}>登录</button>
+            <button type="button" className={mode === 'register' ? 'active' : ''} onClick={() => setMode('register')}>注册</button>
+          </div>
+
+          {error && (
+            <div className="error-banner" role="alert">
+              <span>!</span>
+              {error}
+            </div>
+          )}
+
+          <div className="form-row">
+            <label htmlFor="auth-username">用户名</label>
+            <div className="field">
+              <input
+                id="auth-username"
+                value={username}
+                maxLength={32}
+                autoComplete="username"
+                placeholder="1-32 个字符"
+                onChange={(e) => setUsername(e.target.value)}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="form-row">
+            <label htmlFor="auth-password">密码</label>
+            <div className="field">
+              <input
+                id="auth-password"
+                type="password"
+                value={password}
+                minLength={6}
+                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                placeholder="至少 6 位"
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="actions">
+            <button type="submit" className="primary-button auth-submit" disabled={busy}>
+              {busy ? '处理中…' : mode === 'login' ? '登录' : '注册'}
+            </button>
+          </div>
+        </form>
+
+        <footer className="page-footer">智能标签推荐 · 创作中心</footer>
+      </section>
     </main>
   );
 }
