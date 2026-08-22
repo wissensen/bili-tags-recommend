@@ -1,6 +1,7 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import type { ChangeEvent, DragEvent, KeyboardEvent, SVGProps } from 'react';
 import type { Badge, CandidatesResponse, RecommendTag, SelectedTag } from '@/lib/types';
 import { buildRecommendationView } from '@/lib/recommend';
@@ -223,6 +224,21 @@ export default function Home() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionId, setSubmissionId] = useState('');
   const [error, setError] = useState('');
+  const [currentUser, setCurrentUser] = useState<string | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  const router = useRouter();
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((data: { username: string }) => { setCurrentUser(data.username); setAuthChecked(true); })
+      .catch(() => router.replace('/login'));
+  }, [router]);
+
+  async function logout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    router.replace('/login');
+  }
 
   const recommendations = buildRecommendationView(atomicPool, compositePool, { selectedTags, cursor }).tags;
 
@@ -478,12 +494,20 @@ export default function Home() {
     if (coverInputRef.current) coverInputRef.current.value = '';
   }
 
+  if (!authChecked) return <main className="page-shell" />;
+
   return (
     <main className="page-shell">
       <div className="ambient ambient-one" />
       <div className="ambient ambient-two" />
 
       <section className="app-shell">
+        {currentUser && (
+          <div className="user-bar">
+            <span>{currentUser}</span>
+            <button type="button" onClick={logout}>退出登录</button>
+          </div>
+        )}
         <header className="page-heading">
           <div className="brand-mark">创作中心</div>
           <h1>
