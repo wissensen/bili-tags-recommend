@@ -66,7 +66,12 @@ export async function polishMetadata(input: {
     clearTimeout(timer);
   }
 
-  if (!res.ok) throw new Error('AI_UPSTREAM');
+  if (!res.ok) {
+    // 记录上游真实错误，便于排查（如图片过大/格式非法、模型名错误等）；不外泄给前端。
+    const detail = await res.text().catch(() => '');
+    console.error(`[ai.polish] DashScope ${res.status}: ${detail.slice(0, 500)}`);
+    throw new Error('AI_UPSTREAM');
+  }
   const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
   const content = data.choices?.[0]?.message?.content;
   if (!content) throw new Error('AI_BAD_OUTPUT');

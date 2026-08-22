@@ -338,12 +338,34 @@ export default function Home() {
     });
   }
 
+  // 将封面缩放并压缩为不超过 maxSize 的 JPEG data URL，避免原图过大被模型侧拒绝
+  // （base64 会膨胀约 33%，几 MB 的原图会超过百炼图片体积上限）。
+  async function coverToCompressedDataUrl(file: File, maxSize = 1024, quality = 0.85): Promise<string> {
+    const dataUrl = await fileToDataUrl(file);
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('封面解析失败'));
+      img.src = dataUrl;
+    });
+    const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
+    const width = Math.max(1, Math.round(image.width * scale));
+    const height = Math.max(1, Math.round(image.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return dataUrl; // 拿不到 canvas 上下文时退回原图
+    ctx.drawImage(image, 0, 0, width, height);
+    return canvas.toDataURL('image/jpeg', quality);
+  }
+
   async function polish() {
     if (!coverFile || isPolishing) return;
     setIsPolishing(true);
     setError('');
     try {
-      const coverDataUrl = await fileToDataUrl(coverFile);
+      const coverDataUrl = await coverToCompressedDataUrl(coverFile);
       const res = await fetch('/api/ai/polish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
